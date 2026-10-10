@@ -7,6 +7,8 @@ pub const glob = @import("glob.zig");
 pub const List = @import("ds/list.zig").List;
 pub const skiplist = @import("ds/skiplist.zig");
 pub const zset = @import("ds/zset.zig");
+pub const value = @import("value.zig");
+pub const db = @import("db.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());
