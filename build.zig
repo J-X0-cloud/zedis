@@ -52,6 +52,20 @@ pub fn build(b: *std.Build) void {
     run_compat.addPassthruArgs();
     b.step("compat", "Run the compatibility suite against an embedded server").dependOn(&run_compat.step);
 
+    const bench = b.addExecutable(.{
+        .name = "zedis-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bench/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zedis", .module = zedis }},
+        }),
+    });
+    b.installArtifact(bench);
+    const run_bench = b.addRunArtifact(bench);
+    run_bench.addPassthruArgs();
+    b.step("bench", "Run zedis-bench (pass options after --)").dependOn(&run_bench.step);
+
     const unit_tests = b.addTest(.{ .root_module = zedis });
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
