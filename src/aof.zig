@@ -108,7 +108,7 @@ fn writeValue(w: *FdWriter, key: []const u8, v: *const db_mod.Value) sys.Error!v
         .list => |l| {
             var i: usize = 0;
             while (i < l.len) {
-                const n = @min(items_per_cmd, l.len - i);
+                const n: usize = @min(items_per_cmd, l.len - i);
                 try w.arrayHeader(2 + n);
                 try w.bulk("RPUSH");
                 try w.bulk(key);
@@ -122,7 +122,7 @@ fn writeValue(w: *FdWriter, key: []const u8, v: *const db_mod.Value) sys.Error!v
             const vals = h.values();
             var i: usize = 0;
             while (i < keys.len) {
-                const n = @min(items_per_cmd, keys.len - i);
+                const n: usize = @min(items_per_cmd, keys.len - i);
                 try w.arrayHeader(2 + n * 2);
                 try w.bulk("HSET");
                 try w.bulk(key);
@@ -138,7 +138,7 @@ fn writeValue(w: *FdWriter, key: []const u8, v: *const db_mod.Value) sys.Error!v
             const keys = s.keys();
             var i: usize = 0;
             while (i < keys.len) {
-                const n = @min(items_per_cmd, keys.len - i);
+                const n: usize = @min(items_per_cmd, keys.len - i);
                 try w.arrayHeader(2 + n);
                 try w.bulk("SADD");
                 try w.bulk(key);
@@ -150,7 +150,7 @@ fn writeValue(w: *FdWriter, key: []const u8, v: *const db_mod.Value) sys.Error!v
             var node = z.list.first();
             var remaining = z.len();
             while (remaining > 0) {
-                const n = @min(items_per_cmd, remaining);
+                const n: usize = @min(items_per_cmd, remaining);
                 try w.arrayHeader(2 + n * 2);
                 try w.bulk("ZADD");
                 try w.bulk(key);
@@ -428,6 +428,7 @@ pub const Aof = struct {
 
 const testing = std.testing;
 const Value = db_mod.Value;
+const value_mod = @import("value.zig");
 
 fn tmpDir(buf: []u8) ![]const u8 {
     const path = try std.fmt.bufPrint(buf, "/tmp/zedis-aof-test-{d}-{d}", .{ sys.getPid(), sys.nowUs() });
@@ -455,6 +456,21 @@ test "snapshot serializes every type and skips expired keys" {
     var z = try Value.initZSet(gpa, 3);
     _ = try z.zset.add(gpa, "m", 1.5, .{}, null);
     try dbs[1].set("z", z, .{});
+    // Collections larger than one batch exercise the chunking arithmetic.
+    var h: Value = .{ .hash = .empty };
+    var s: Value = .{ .set = .empty };
+    var bigz = try Value.initZSet(gpa, 4);
+    var nb: [8]u8 = undefined;
+    i = 0;
+    while (i < 130) : (i += 1) {
+        const name = std.fmt.bufPrint(&nb, "f{d}", .{i}) catch unreachable;
+        _ = try value_mod.hashSet(gpa, &h.hash, name, "v");
+        _ = try value_mod.setAdd(gpa, &s.set, name);
+        _ = try bigz.zset.add(gpa, name, @floatFromInt(i), .{}, null);
+    }
+    try dbs[1].set("h", h, .{});
+    try dbs[1].set("s", s, .{});
+    try dbs[1].set("bigz", bigz, .{});
 
     var dir_buf: [128]u8 = undefined;
     const dir = try tmpDir(&dir_buf);
@@ -464,7 +480,7 @@ test "snapshot serializes every type and skips expired keys" {
     var w: FdWriter = .{ .fd = fd, .buf = &snapshot_buf };
     const n = try writeSnapshot(&w, &dbs, clock);
     sys.close(fd);
-    try testing.expectEqual(@as(usize, 4), n);
+    try testing.expectEqual(@as(usize, 7), n);
 
     const data = (try sys.readFileAlloc(gpa, path)).?;
     defer gpa.free(data);
@@ -474,14 +490,66 @@ test "snapshot serializes every type and skips expired keys" {
     var off: usize = 0;
     var names: std.ArrayList(u8) = .empty;
     defer names.deinit(gpa);
+    // Replay the snapshot into fresh databases and compare.
+    var copies = [_]Db{ Db.init(gpa, 0, &clock, &stats, 5), Db.init(gpa, 1, &clock, &stats, 6) };
+    defer for (&copies) |*d| d.deinit();
+    var current: usize = 0;
     while (off < data.len) {
         const r = (try p.parse(data[off..])).?;
-        try names.appendSlice(gpa, r.args[0]);
-        try names.append(gpa, ' ');
+        if (!std.mem.eql(u8, r.args[0], "SELECT")) {
+            try names.appendSlice(gpa, r.args[0]);
+            try names.append(gpa, ' ');
+        } else current = try std.fmt.parseInt(usize, r.args[1], 10);
+        try applyForTest(gpa, &copies[current], r.args);
         off += r.consumed;
     }
     // 70 list items are split into a 64 item and a 6 item RPUSH.
-    try testing.expectEqualStrings("SELECT SET RPUSH RPUSH SET PEXPIREAT SELECT ZADD ", names.items);
+    try testing.expect(std.mem.startsWith(u8, names.items, "SET RPUSH RPUSH SET PEXPIREAT "));
+    try testing.expectEqual(@as(usize, 3), std.mem.count(u8, names.items, "HSET "));
+    try testing.expectEqual(@as(usize, 3), std.mem.count(u8, names.items, "SADD "));
+    try testing.expectEqual(@as(usize, 4), std.mem.count(u8, names.items, "ZADD "));
+    try testing.expectEqual(@as(usize, 70), copies[0].lookupRead("l").?.list.len);
+    try testing.expectEqual(@as(usize, 130), copies[1].lookupRead("h").?.hash.count());
+    try testing.expectEqual(@as(usize, 130), copies[1].lookupRead("s").?.set.count());
+    const zc = copies[1].lookupRead("bigz").?.zset;
+    try testing.expectEqual(@as(usize, 130), zc.len());
+    try testing.expectEqual(@as(?f64, 129), zc.score("f129"));
+    try testing.expectEqual(@as(?i64, 5000), copies[0].getExpire("ttl"));
+}
+
+/// A minimal interpreter for the commands a snapshot contains.
+fn applyForTest(gpa: std.mem.Allocator, d: *Db, args: []const []const u8) !void {
+    const cmd = args[0];
+    if (std.mem.eql(u8, cmd, "SELECT")) return;
+    if (std.mem.eql(u8, cmd, "SET")) return d.set(args[1], try Value.initString(gpa, args[2]), .{});
+    if (std.mem.eql(u8, cmd, "PEXPIREAT")) return d.setExpire(args[1], try std.fmt.parseInt(i64, args[2], 10));
+    const v = d.lookupWrite(args[1]) orelse blk: {
+        const fresh: Value = if (std.mem.eql(u8, cmd, "RPUSH"))
+            .{ .list = .empty }
+        else if (std.mem.eql(u8, cmd, "HSET"))
+            .{ .hash = .empty }
+        else if (std.mem.eql(u8, cmd, "SADD"))
+            .{ .set = .empty }
+        else
+            try Value.initZSet(gpa, 1);
+        break :blk try d.add(args[1], fresh);
+    };
+    var i: usize = 2;
+    while (i < args.len) : (i += 1) {
+        switch (v.*) {
+            .list => |*l| try l.pushBack(gpa, args[i]),
+            .set => |*s| _ = try value_mod.setAdd(gpa, s, args[i]),
+            .hash => |*h| {
+                _ = try value_mod.hashSet(gpa, h, args[i], args[i + 1]);
+                i += 1;
+            },
+            .zset => |z| {
+                _ = try z.add(gpa, args[i + 1], num.parseF64(args[i]).?, .{}, null);
+                i += 1;
+            },
+            .string => unreachable,
+        }
+    }
 }
 
 test "feed emits SELECT only when the database changes" {
