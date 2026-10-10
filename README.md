@@ -147,7 +147,7 @@ the entrypoint).
 ```sh
 zig build test      # 76 unit tests: parser, numbers, data structures, keyspace,
                     # AOF, dispatcher and propagation rules
-zig build compat    # 1,698 end-to-end checks over TCP against an embedded server
+zig build compat    # 1,716 end-to-end checks over TCP against an embedded server
 ```
 
 `zig build compat` starts zedis on a background thread with a leak-checking
@@ -162,7 +162,7 @@ built from source:
 
 ```sh
 redis-server --port 7790 --save "" &
-zig build compat -- --port 7790   # 1,109 protocol-level checks, persistence cases skipped
+zig build compat -- --port 7790   # 1,127 protocol-level checks, persistence cases skipped
 ```
 
 ## Benchmarks
