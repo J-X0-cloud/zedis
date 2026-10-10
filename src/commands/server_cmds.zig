@@ -307,7 +307,7 @@ pub fn config(ctx: *Ctx) Error!void {
     } else if (Ctx.is(sub, "resetstat") and ctx.args.len == 2) {
         ctx.server.stats = .{};
         ctx.server.db_stats = .{};
-        ctx.server.command_calls.clearRetainingCapacity();
+        ctx.server.command_calls = @splat(0);
         try ctx.w.ok();
     } else if (Ctx.is(sub, "rewrite") and ctx.args.len == 2) {
         try ctx.w.err("ERR The server is running without a config file");
@@ -507,8 +507,10 @@ pub fn info(ctx: *Ctx) Error!void {
     }
     if (all or Ctx.is(section, "commandstats")) {
         try out.appendSlice(gpa, "# Commandstats\r\n");
-        var it = server.command_calls.iterator();
-        while (it.next()) |e| try out.print(gpa, "cmdstat_{s}:calls={d}\r\n", .{ e.key_ptr.*, e.value_ptr.* });
+        for (server.command_calls, 0..) |calls, i| {
+            if (calls == 0) continue;
+            try out.print(gpa, "cmdstat_{s}:calls={d}\r\n", .{ table.all[i].name, calls });
+        }
         try out.appendSlice(gpa, "\r\n");
     }
     if (default or Ctx.is(section, "keyspace")) {

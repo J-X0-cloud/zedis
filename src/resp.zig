@@ -273,9 +273,27 @@ pub const Writer = struct {
     pub const Error = Allocator.Error;
 
     fn header(self: Writer, prefix: u8, n: i64) Error!void {
-        var buf: [32]u8 = undefined;
-        const s = std.fmt.bufPrint(&buf, "{c}{d}\r\n", .{ prefix, n }) catch unreachable;
-        try self.out.appendSlice(self.gpa, s);
+        // Hot path for every reply: format the integer by hand rather than
+        // going through std.fmt.
+        var buf: [24]u8 = undefined;
+        var i: usize = buf.len;
+        var v: u64 = @abs(n);
+        buf[i - 1] = '\n';
+        buf[i - 2] = '\r';
+        i -= 2;
+        while (true) {
+            i -= 1;
+            buf[i] = @intCast('0' + v % 10);
+            v /= 10;
+            if (v == 0) break;
+        }
+        if (n < 0) {
+            i -= 1;
+            buf[i] = '-';
+        }
+        i -= 1;
+        buf[i] = prefix;
+        try self.out.appendSlice(self.gpa, buf[i..]);
     }
 
     pub fn raw(self: Writer, bytes: []const u8) Error!void {
@@ -686,7 +704,9 @@ test "writer emits RESP2 and RESP3 variants" {
     try w.nullBulk();
     try w.boolean(true);
     try w.err("ERR bad\r\nthing");
-    try testing.expectEqualStrings("*2\r\n$1\r\nk\r\n$3\r\n1.5\r\n$-1\r\n:1\r\n-ERR bad  thing\r\n", out.items);
+    try w.int(std.math.minInt(i64));
+    try w.int(0);
+    try testing.expectEqualStrings("*2\r\n$1\r\nk\r\n$3\r\n1.5\r\n$-1\r\n:1\r\n-ERR bad  thing\r\n:-9223372036854775808\r\n:0\r\n", out.items);
 
     out.clearRetainingCapacity();
     w.proto = 3;

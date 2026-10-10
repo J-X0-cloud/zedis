@@ -229,6 +229,11 @@ pub fn lookup(name: []const u8) ?*const Command {
     return &all[i];
 }
 
+/// Position of a command within `all`.
+pub fn indexOf(c: *const Command) usize {
+    return (@intFromPtr(c) - @intFromPtr(&all[0])) / @sizeOf(Command);
+}
+
 test "every command name is unique and lowercase" {
     for (all, 0..) |a, i| {
         for (a.name) |ch| try std.testing.expect(!std.ascii.isUpper(ch));
@@ -241,6 +246,11 @@ test "lookup is case-insensitive" {
     try std.testing.expectEqualStrings("zrangebyscore", lookup("ZRangeByScore").?.name);
     try std.testing.expect(lookup("nope") == null);
     try std.testing.expect(lookup("this-command-name-is-far-too-long-to-exist") == null);
+}
+
+test "indexOf maps back to the table" {
+    const c = lookup("zadd").?;
+    try std.testing.expectEqualStrings("zadd", all[indexOf(c)].name);
 }
 
 test "arity checks" {

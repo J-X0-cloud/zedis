@@ -99,7 +99,8 @@ pub const Server = struct {
     last_cron_ms: i64 = 0,
     cron_loops: u64 = 0,
     active_expire_enabled: bool = true,
-    command_calls: std.StringArrayHashMapUnmanaged(u64) = .empty,
+    /// Per-command call counters, indexed like `commands.all`.
+    command_calls: [commands.all.len]u64 = @splat(0),
     /// Optional allocator wrapper used to report memory usage in INFO.
     tracker: ?*const @import("tracking_allocator.zig").TrackingAllocator = null,
 
@@ -177,7 +178,6 @@ pub const Server = struct {
         self.aof.deinit();
         for (self.dbs) |*d| d.deinit();
         gpa.free(self.dbs);
-        self.command_calls.deinit(gpa);
         self.config.deinit(gpa);
         if (self.listen_fd >= 0) sys.close(self.listen_fd);
         self.epoll.deinit();
@@ -665,9 +665,7 @@ pub const Server = struct {
         c.commands_processed += 1;
         try cmd.handler(&ctx);
         self.stats.total_commands += 1;
-        const gop = try self.command_calls.getOrPut(self.gpa, cmd.name);
-        if (!gop.found_existing) gop.value_ptr.* = 0;
-        gop.value_ptr.* += 1;
+        self.command_calls[commands.indexOf(cmd)] += 1;
         if (self.dirty != dirty_before and !ctx.custom_propagation and cmd.flags.write) {
             try self.propagate(c.db, args);
         }
