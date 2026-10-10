@@ -145,7 +145,9 @@ pub fn main(init: std.process.Init) !void {
     const argv = try init.minimal.args.toSlice(arena);
     var args_list: std.ArrayList([]const u8) = .empty;
     for (argv[1..]) |a| try args_list.append(arena, a);
-    const opts = parseArgs(args_list.items);
+    var opts = parseArgs(args_list.items);
+    // Like redis-cli, default to raw output when stdout is not a terminal.
+    if (!sys.isTty(1)) opts.raw = true;
     sys.ignoreSigpipe();
 
     var conn = Connection.connect(gpa, opts.host, opts.port) catch |err| {

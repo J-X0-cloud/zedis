@@ -488,7 +488,9 @@ pub const Value = union(enum) {
             .simple => |s| try w.print("{s}\n", .{s}),
             .err => |s| try w.print("(error) {s}\n", .{s}),
             .int => |v| try w.print("(integer) {d}\n", .{v}),
-            .bulk, .verbatim => |s| {
+            // redis-cli prints verbatim text (INFO, CLIENT LIST) as-is.
+            .verbatim => |s| try w.print("{s}\n", .{s}),
+            .bulk => |s| {
                 try w.writeAll("\"");
                 for (s) |c| switch (c) {
                     '\\' => try w.writeAll("\\\\"),
