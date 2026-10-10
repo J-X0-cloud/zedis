@@ -179,6 +179,18 @@ pub fn keyspace(h: *Harness) !void {
     try h.expect(&.{ "COPY", "hh", "hh2", "REPLACE" }, .{ .int = 1 });
     try h.expect(&.{ "HGET", "hh2", "f" }, .{ .bulk = "changed" });
     try h.expect(&.{ "COPY", "zz", "zz", "DB", "2" }, .{ .int = 1 });
+    // REPLACE deletes the destination, which swap-removes the newest key
+    // into its slot; the source must be read before that happens.
+    try h.expect(&.{ "SELECT", "5" }, .ok);
+    try h.expect(&.{ "SET", "cdst", "old" }, .ok);
+    try h.expect(&.{ "RPUSH", "csrc", "a", "b" }, .{ .int = 2 });
+    try h.expect(&.{ "EXPIRE", "csrc", "100" }, .{ .int = 1 });
+    try h.expect(&.{ "COPY", "csrc", "cdst", "REPLACE" }, .{ .int = 1 });
+    try h.expect(&.{ "LRANGE", "cdst", "0", "-1" }, .{ .strs = &.{ "a", "b" } });
+    try h.expect(&.{ "TTL", "cdst" }, .{ .int = 100 });
+    try h.expect(&.{ "LRANGE", "csrc", "0", "-1" }, .{ .strs = &.{ "a", "b" } });
+    try h.expect(&.{"FLUSHDB"}, .ok);
+    try h.expect(&.{ "SELECT", "0" }, .ok);
 
     try h.expect(&.{"FLUSHDB"}, .ok);
     try h.expect(&.{ "MSET", "user:1", "a", "user:2", "b", "item:1", "c" }, .ok);

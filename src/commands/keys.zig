@@ -316,14 +316,17 @@ pub fn copy(ctx: *Ctx) Error!void {
     const src = ctx.db();
     const v = src.lookupRead(src_key) orelse return ctx.w.int(0);
     const dst = &ctx.server.dbs[target];
-    if (dst.exists(dst_key)) {
-        if (!replace) return ctx.w.int(0);
-        _ = dst.delete(dst_key);
-    }
+    const dst_exists = dst.exists(dst_key);
+    if (dst_exists and !replace) return ctx.w.int(0);
+    // Clone and read the TTL before touching the destination: deleting a key
+    // swap-removes it from the dictionary, which can move the source entry
+    // and invalidate `v`.
+    const when = src.getExpire(src_key);
     var copy_v = try v.clone(ctx.gpa, ctx.server.randomSeed());
     errdefer copy_v.deinit(ctx.gpa);
+    if (dst_exists) _ = dst.delete(dst_key);
     _ = try dst.add(dst_key, copy_v);
-    if (src.getExpire(src_key)) |when| try dst.setExpire(dst_key, when);
+    if (when) |w| try dst.setExpire(dst_key, w);
     ctx.modifiedIn(target, dst_key);
     try ctx.w.int(1);
 }
