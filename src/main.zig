@@ -28,8 +28,8 @@ pub fn main(init: std.process.Init) !void {
     var tracker = zedis.TrackingAllocator.init(init.gpa);
     const gpa = tracker.allocator();
 
+    // Ownership of the configuration moves to the server once it starts.
     var config: zedis.Config = .{};
-    defer config.deinit(gpa);
 
     for (args[1..]) |a| {
         if (std.mem.eql(u8, a, "--help") or std.mem.eql(u8, a, "-h")) {

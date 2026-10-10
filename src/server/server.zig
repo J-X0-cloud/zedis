@@ -178,6 +178,7 @@ pub const Server = struct {
         for (self.dbs) |*d| d.deinit();
         gpa.free(self.dbs);
         self.command_calls.deinit(gpa);
+        self.config.deinit(gpa);
         if (self.listen_fd >= 0) sys.close(self.listen_fd);
         self.epoll.deinit();
         self.waker.deinit();
