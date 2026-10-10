@@ -440,6 +440,9 @@ pub fn bitcount(ctx: *Ctx) Error!void {
         .missing => return ctx.w.int(0),
         .found => |s| s,
     };
+    // Redis rejects an inverted pair of negative indexes before clamping,
+    // so BITCOUNT key -1 -3 is 0 even on a one-byte string.
+    if (start < 0 and end < 0 and start > end) return ctx.w.int(0);
     const total: i64 = if (bit_mode) @as(i64, @intCast(s.len)) * 8 else @intCast(s.len);
     if (start < 0) start = @max(0, total + start);
     if (end < 0) end = @max(0, total + end);

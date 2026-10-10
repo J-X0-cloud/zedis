@@ -134,6 +134,9 @@ pub fn bits(h: *Harness) !void {
     try h.expect(&.{ "BITCOUNT", "bc", "1", "1" }, .{ .int = 6 });
     try h.expect(&.{ "BITCOUNT", "bc", "1", "1", "BYTE" }, .{ .int = 6 });
     try h.expect(&.{ "BITCOUNT", "bc", "5", "30", "BIT" }, .{ .int = 17 });
+    try h.expect(&.{ "BITCOUNT", "bc", "-1", "-3" }, .{ .int = 0 });
+    try h.expect(&.{ "BITCOUNT", "bc", "-1", "-30", "BIT" }, .{ .int = 0 });
+    try h.expect(&.{ "BITCOUNT", "bc", "-100", "-1" }, .{ .int = 26 });
     try h.expect(&.{ "BITCOUNT", "bc", "-2", "-1" }, .{ .int = 7 });
     try h.expect(&.{ "BITCOUNT", "nope" }, .{ .int = 0 });
 }
