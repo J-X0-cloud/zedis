@@ -1,0 +1,16 @@
+.{
+    .name = .zedis,
+    .version = "0.1.0",
+    .fingerprint = 0x4b559bd60e4a66ed,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "tests",
+        "bench",
+        "LICENSE",
+        "README.md",
+    },
+}
