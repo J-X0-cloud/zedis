@@ -312,7 +312,10 @@ pub const Server = struct {
                     else => |id| {
                         const c = self.clients.get(id) orelse continue;
                         if (ev.events & (sys.Epoll.IN | sys.Epoll.HUP | sys.Epoll.ERR) != 0) self.readFromClient(c);
-                        if (ev.events & sys.Epoll.OUT != 0 and !c.close_asap) self.writeToClient(c);
+                        // Socket became writable: defer the write to beforeSleep so a
+                        // reply produced in this same iteration can never overtake
+                        // the AOF write for its command.
+                        if (ev.events & sys.Epoll.OUT != 0 and !c.close_asap) self.queueWrite(c);
                     },
                 }
             }
