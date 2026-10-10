@@ -22,6 +22,7 @@ test {
     _ = @import("server/client.zig");
     _ = @import("server/server.zig");
     _ = @import("commands/table.zig");
+    _ = @import("server/server_test.zig");
 }
 
 test {

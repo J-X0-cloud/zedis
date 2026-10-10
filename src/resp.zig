@@ -756,3 +756,45 @@ test "render matches redis-cli formatting" {
     try r.value.render(&w, 0);
     try testing.expectEqualStrings("1) \"a\"\n2) 1) (integer) 1\n", w.buffered());
 }
+
+test "random chunking of a pipelined stream yields the same commands" {
+    const gpa = testing.allocator;
+    var prng = std.Random.DefaultPrng.init(0xC0FFEE);
+    const rnd = prng.random();
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(gpa);
+    var expected_args: usize = 0;
+    var n: usize = 0;
+    while (n < 200) : (n += 1) {
+        var argv: [6][]const u8 = undefined;
+        var bufs: [6][40]u8 = undefined;
+        const argc = 1 + rnd.uintLessThan(usize, argv.len);
+        for (argv[0..argc], 0..) |*a, i| {
+            const len = rnd.uintLessThan(usize, bufs[i].len);
+            rnd.bytes(bufs[i][0..len]);
+            a.* = bufs[i][0..len];
+        }
+        try encodeCommand(gpa, &stream, argv[0..argc]);
+        expected_args += argc;
+    }
+
+    var p = RequestParser.init(gpa);
+    defer p.deinit();
+    // Feed the stream through a growing window, as a socket would.
+    var window_end: usize = 0;
+    var start: usize = 0;
+    var commands: usize = 0;
+    var args_seen: usize = 0;
+    while (start < stream.items.len) {
+        if (try p.parse(stream.items[start..window_end])) |r| {
+            commands += 1;
+            args_seen += r.args.len;
+            start += r.consumed;
+            continue;
+        }
+        if (window_end == stream.items.len) return error.TestUnexpectedResult;
+        window_end = @min(stream.items.len, window_end + 1 + rnd.uintLessThan(usize, 64));
+    }
+    try testing.expectEqual(@as(usize, 200), commands);
+    try testing.expectEqual(expected_args, args_seen);
+}
