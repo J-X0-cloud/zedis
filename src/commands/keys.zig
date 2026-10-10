@@ -170,6 +170,9 @@ pub const ScanOptions = struct {
     count: usize = 10,
     pattern: ?[]const u8 = null,
     type_filter: ?Kind = null,
+    /// TYPE named something that is not a type: Redis 7.2 then simply
+    /// matches nothing instead of failing.
+    unknown_type: bool = false,
     novalues: bool = false,
 };
 
@@ -196,10 +199,8 @@ pub fn parseScanOptions(ctx: *Ctx, start: usize, allow_type: bool) Error!?ScanOp
             var lower: [16]u8 = undefined;
             const t = ctx.args[i + 1];
             const name = std.ascii.lowerString(&lower, t[0..@min(t.len, 16)]);
-            opts.type_filter = std.meta.stringToEnum(Kind, name) orelse {
-                try ctx.w.errFmt("ERR unknown type name '{s}'", .{t});
-                return null;
-            };
+            opts.type_filter = std.meta.stringToEnum(Kind, name);
+            opts.unknown_type = opts.type_filter == null;
             i += 1;
         } else if (!allow_type and Ctx.is(a, "novalues")) {
             opts.novalues = true;
@@ -224,6 +225,7 @@ pub fn scan(ctx: *Ctx) Error!void {
     var out: std.ArrayList([]const u8) = .empty;
     defer out.deinit(ctx.gpa);
     const next = try ctx.db().scan(ctx.gpa, cursor, opts.count, opts.pattern, opts.type_filter, &out);
+    if (opts.unknown_type) out.clearRetainingCapacity();
     try ctx.w.array(2);
     try ctx.w.bulkInt(@intCast(next));
     try ctx.w.array(out.items.len);
