@@ -22,6 +22,17 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(server);
 
+    const cli = b.addExecutable(.{
+        .name = "zedis-cli",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/cli/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zedis", .module = zedis }},
+        }),
+    });
+    b.installArtifact(cli);
+
     const run_server = b.addRunArtifact(server);
     run_server.step.dependOn(b.getInstallStep());
     run_server.addPassthruArgs();

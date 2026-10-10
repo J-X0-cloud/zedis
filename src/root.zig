@@ -16,6 +16,7 @@ pub const TrackingAllocator = @import("server/tracking_allocator.zig").TrackingA
 pub const log = @import("server/log.zig");
 pub const Server = @import("server/server.zig").Server;
 pub const commands = @import("commands/table.zig");
+pub const client = @import("client.zig");
 test {
     _ = @import("server/config.zig");
     _ = @import("server/client.zig");

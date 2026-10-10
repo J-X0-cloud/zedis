@@ -164,6 +164,12 @@ pub fn readFileAlloc(gpa: std.mem.Allocator, path: []const u8) (Error || std.mem
     return buf[0..off];
 }
 
+/// True when `fd` refers to a terminal.
+pub fn isTty(fd: fd_t) bool {
+    var t: linux.termios = undefined;
+    return linux.errno(linux.ioctl(fd, linux.T.CGETS, @intFromPtr(&t))) == .SUCCESS;
+}
+
 // ------------------------------------------------------------------ time --
 
 /// Wall clock in milliseconds since the Unix epoch.
