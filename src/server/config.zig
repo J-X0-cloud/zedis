@@ -246,7 +246,7 @@ test "config get with glob" {
     defer cfg.deinit(testing.allocator);
     const Collect = struct {
         names: std.ArrayList([]const u8) = .empty,
-        fn emit(self: *@This(), name: []const u8, _: []const u8) !void {
+        pub fn emit(self: *@This(), name: []const u8, _: []const u8) !void {
             try self.names.append(testing.allocator, name);
         }
     };

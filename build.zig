@@ -11,6 +11,22 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const server = b.addExecutable(.{
+        .name = "zedis-server",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "zedis", .module = zedis }},
+        }),
+    });
+    b.installArtifact(server);
+
+    const run_server = b.addRunArtifact(server);
+    run_server.step.dependOn(b.getInstallStep());
+    run_server.addPassthruArgs();
+    b.step("run", "Run zedis-server").dependOn(&run_server.step);
+
     const unit_tests = b.addTest(.{ .root_module = zedis });
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");

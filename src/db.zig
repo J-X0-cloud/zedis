@@ -262,7 +262,7 @@ pub const Db = struct {
             gpa: Allocator,
             oom: bool = false,
 
-            fn visit(v: *@This(), idx: usize) void {
+            pub fn visit(v: *@This(), idx: usize) void {
                 v.candidates.append(v.gpa, v.db.dict.keys()[idx]) catch {
                     v.oom = true;
                 };
