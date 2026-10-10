@@ -12,7 +12,7 @@ pub const Logger = struct {
     fd: sys.fd_t = 2,
 
     pub fn log(self: *const Logger, level: Level, comptime fmt: []const u8, args: anytype) void {
-        if (self.quiet or @intFromEnum(level) < @intFromEnum(self.min)) return;
+        if (self.quiet or @backingInt(level) < @backingInt(self.min)) return;
         var buf: [1024]u8 = undefined;
         const ms = sys.nowMs();
         const secs: u64 = @intCast(@divTrunc(ms, 1000));
@@ -30,7 +30,7 @@ pub const Logger = struct {
         const prefix = std.fmt.bufPrint(&buf, "{d}:M {d:0>2} {s} {d} {d:0>2}:{d:0>2}:{d:0>2}.{d:0>3} {c} ", .{
             sys.getPid(),
             md.day_index + 1,
-            months[@intFromEnum(md.month) - 1],
+            months[@backingInt(md.month) - 1],
             day.year,
             ds.getHoursIntoDay(),
             ds.getMinutesIntoHour(),

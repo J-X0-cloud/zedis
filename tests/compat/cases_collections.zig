@@ -124,7 +124,7 @@ pub fn blocking(h: *Harness) !void {
 
     // Pipelined commands after a blocking one run once it is served.
     try c1.append(&.{ "BLPOP", "pipe", "5" });
-    try c1.append(&.{ "PING" });
+    try c1.append(&.{"PING"});
     try c1.flush();
     zedis.sys.sleepMs(50);
     try h.expect(&.{ "RPUSH", "pipe", "v" }, .{ .int = 1 });

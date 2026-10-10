@@ -126,7 +126,7 @@ pub const Server = struct {
             .blocking_keys = undefined,
             .aof = aof_mod.Aof.init(gpa, config.dir, config.appendfilename),
         };
-        self.log.min = @enumFromInt(@intFromEnum(config.loglevel));
+        self.log.min = @fromBackingInt(@intCast(@backingInt(config.loglevel)));
         const hex = "0123456789abcdef";
         for (&self.run_id) |*c| c.* = hex[self.rng.random().uintLessThan(usize, 16)];
 

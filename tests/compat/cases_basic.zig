@@ -180,7 +180,7 @@ pub fn keyspace(h: *Harness) !void {
     try h.expect(&.{ "HGET", "hh2", "f" }, .{ .bulk = "changed" });
     try h.expect(&.{ "COPY", "zz", "zz", "DB", "2" }, .{ .int = 1 });
 
-    try h.expect(&.{ "FLUSHDB" }, .ok);
+    try h.expect(&.{"FLUSHDB"}, .ok);
     try h.expect(&.{ "MSET", "user:1", "a", "user:2", "b", "item:1", "c" }, .ok);
     try h.expect(&.{ "KEYS", "user:*" }, .{ .unordered = &.{ "user:1", "user:2" } });
     try h.expect(&.{ "KEYS", "*:1" }, .{ .unordered = &.{ "user:1", "item:1" } });

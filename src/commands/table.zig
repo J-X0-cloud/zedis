@@ -62,7 +62,7 @@ pub const all = [_]Command{
     cmd("unlink", keys.del, -2, WF, 1, -1, 1),
     cmd("exists", keys.exists, -2, RF, 1, -1, 1),
     cmd("touch", keys.touch, -2, RF, 1, -1, 1),
-    cmd("type", keys.@"type", 2, RF, 1, 1, 1),
+    cmd("type", keys.type, 2, RF, 1, 1, 1),
     cmd("expire", keys.expire, -3, WF, 1, 1, 1),
     cmd("pexpire", keys.pexpire, -3, WF, 1, 1, 1),
     cmd("expireat", keys.expireat, -3, WF, 1, 1, 1),

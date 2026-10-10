@@ -237,7 +237,13 @@ pub fn client(ctx: *Ctx) Error!void {
     } else if (Ctx.is(sub, "help")) {
         const lines = [_][]const u8{
             "CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are:",
-            "GETNAME", "SETNAME <name>", "ID", "INFO", "LIST", "KILL ID <client-id>", "HELP",
+            "GETNAME",
+            "SETNAME <name>",
+            "ID",
+            "INFO",
+            "LIST",
+            "KILL ID <client-id>",
+            "HELP",
         };
         try ctx.w.array(lines.len);
         for (lines) |l| try ctx.w.simple(l);
@@ -295,7 +301,7 @@ pub fn config(ctx: *Ctx) Error!void {
                     ctx.server.disableAof();
                 }
             }
-            if (Ctx.is(name, "loglevel")) ctx.server.log.min = @enumFromInt(@intFromEnum(cfg.loglevel));
+            if (Ctx.is(name, "loglevel")) ctx.server.log.min = @fromBackingInt(@intCast(@backingInt(cfg.loglevel)));
         }
         try ctx.w.ok();
     } else if (Ctx.is(sub, "resetstat") and ctx.args.len == 2) {
@@ -308,7 +314,10 @@ pub fn config(ctx: *Ctx) Error!void {
     } else if (Ctx.is(sub, "help")) {
         const lines = [_][]const u8{
             "CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are:",
-            "GET <pattern>", "SET <directive> <value>", "RESETSTAT", "HELP",
+            "GET <pattern>",
+            "SET <directive> <value>",
+            "RESETSTAT",
+            "HELP",
         };
         try ctx.w.array(lines.len);
         for (lines) |l| try ctx.w.simple(l);
