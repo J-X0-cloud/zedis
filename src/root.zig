@@ -9,6 +9,15 @@ pub const skiplist = @import("ds/skiplist.zig");
 pub const zset = @import("ds/zset.zig");
 pub const value = @import("value.zig");
 pub const db = @import("db.zig");
+pub const aof = @import("aof.zig");
+pub const Config = @import("server/config.zig").Config;
+pub const Client = @import("server/client.zig").Client;
+pub const TrackingAllocator = @import("server/tracking_allocator.zig").TrackingAllocator;
+pub const log = @import("server/log.zig");
+test {
+    _ = @import("server/config.zig");
+    _ = @import("server/client.zig");
+}
 
 test {
     @import("std").testing.refAllDecls(@This());
