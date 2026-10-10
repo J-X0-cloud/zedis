@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - name: Check formatting
+        run: zig fmt --check .
+      - name: Unit tests
+        run: zig build test --summary all
+      - name: Compatibility suite (debug)
+        run: zig build compat
+      - name: Compatibility suite (ReleaseSafe)
+        run: zig build compat -Doptimize=ReleaseSafe
+
+  reference-redis:
+    # Runs the same suite against a real Redis to keep the expectations honest.
+    runs-on: ubuntu-latest
+    env:
+      REDIS_VERSION: 7.2.5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - name: Cache Redis build
+        id: cache-redis
+        uses: actions/cache@v4
+        with:
+          path: redis-${{ env.REDIS_VERSION }}/src/redis-server
+          key: redis-server-${{ env.REDIS_VERSION }}
+      - name: Build Redis
+        if: steps.cache-redis.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL "https://download.redis.io/releases/redis-${REDIS_VERSION}.tar.gz" | tar -xz
+          make -C "redis-${REDIS_VERSION}" -j"$(nproc)" BUILD_TLS=no MALLOC=libc
+      - name: Run the suite against Redis
+        run: |
+          "redis-${REDIS_VERSION}/src/redis-server" --port 7790 --save "" --daemonize yes
+          sleep 1
+          zig build compat -- --port 7790
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t zedis .
+      - name: Smoke test
+        run: |
+          docker run -d --name zedis -e PORT=7000 -p 7000:7000 zedis
+          sleep 2
+          printf 'PING\r\n' | timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/7000; cat >&3; head -c 7 <&3' | grep PONG
