@@ -39,6 +39,7 @@ const cases = [_]Case{
     .{ .name = "protocol", .run = advanced.protocol },
     .{ .name = "resp3", .run = advanced.resp3 },
     .{ .name = "auth", .run = advanced.auth },
+    .{ .name = "server", .run = advanced.server },
 };
 
 /// A zedis server running on a background thread.

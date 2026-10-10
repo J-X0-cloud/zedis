@@ -244,3 +244,56 @@ pub fn auth(h: *Harness) !void {
     // The suite's own connection authenticated before the password was set.
     try h.expect(&.{ "CONFIG", "SET", "requirepass", "" }, .ok);
 }
+
+pub fn server(h: *Harness) !void {
+    try h.expect(&.{ "SET", "in0", "a" }, .ok);
+    try h.expect(&.{ "SELECT", "1" }, .ok);
+    try h.expect(&.{ "SET", "in1", "b" }, .ok);
+    try h.expect(&.{ "SWAPDB", "0", "1" }, .ok);
+    try h.expect(&.{ "GET", "in0" }, .{ .bulk = "a" });
+    try h.expect(&.{ "SELECT", "0" }, .ok);
+    try h.expect(&.{ "GET", "in1" }, .{ .bulk = "b" });
+    try h.expect(&.{ "SWAPDB", "0", "99" }, .{ .err = "ERR DB index is out of range" });
+    try h.expect(&.{ "SWAPDB", "x", "1" }, .{ .err = "ERR invalid first DB index" });
+
+    try h.expect(&.{ "SET", "num", "12345" }, .ok);
+    try h.expect(&.{ "SET", "word", "hello" }, .ok);
+    try h.expect(&.{ "OBJECT", "ENCODING", "num" }, .{ .bulk = "int" });
+    try h.expect(&.{ "OBJECT", "ENCODING", "word" }, .{ .bulk = "embstr" });
+    try h.expect(&.{ "OBJECT", "ENCODING", "missing" }, .nil);
+    try h.expect(&.{ "OBJECT", "NOPE", "num" }, .{ .err = "ERR unknown subcommand" });
+
+    const info = try h.call(&.{ "INFO", "keyspace" });
+    const text = info.str() orelse "";
+    h.assert(std.mem.indexOf(u8, text, "# Keyspace") != null, "INFO keyspace missing header: {s}", .{text});
+    h.assert(std.mem.indexOf(u8, text, "db0:keys=3") != null, "INFO keyspace missing db0 line: {s}", .{text});
+    const all_info = try h.call(&.{"INFO"});
+    const all_text = all_info.str() orelse "";
+    for ([_][]const u8{ "# Server", "# Clients", "# Memory", "# Persistence", "# Stats", "redis_version:", "connected_clients:", "aof_enabled:" }) |needle| {
+        h.assert(std.mem.indexOf(u8, all_text, needle) != null, "INFO lacks {s}", .{needle});
+    }
+
+    try h.expect(&.{ "CONFIG", "GET", "appendonly", "appendfsync" }, .{ .len = 4 });
+    const globbed = try h.call(&.{ "CONFIG", "GET", "append*" });
+    const globbed_len = if (globbed.items()) |items| items.len else 0;
+    h.assert(globbed_len >= 6, "CONFIG GET append* returned {s}", .{h.render(globbed)});
+    try h.expect(&.{ "CONFIG", "SET", "hz", "20" }, .ok);
+    try h.expect(&.{ "CONFIG", "GET", "hz" }, .{ .strs = &.{ "hz", "20" } });
+    try h.expect(&.{ "CONFIG", "SET", "hz", "10" }, .ok);
+    try h.expect(&.{ "CONFIG", "SET", "no-such-option", "1" }, .{ .err = "ERR Unknown option or number of arguments for CONFIG SET - 'no-such-option'" });
+
+    try h.expect(&.{ "COMMAND", "INFO", "get", "nosuchcommand" }, .{ .len = 2 });
+    try h.expect(&.{ "CLIENT", "SETNAME", "listed" }, .ok);
+    const list = try h.call(&.{ "CLIENT", "LIST" });
+    h.assert(std.mem.indexOf(u8, list.str() orelse "", "name=listed") != null, "CLIENT LIST lacks our name: {s}", .{list.str() orelse ""});
+
+    var victim = try h.connect();
+    defer victim.close();
+    const id = try victim.call(&.{ "CLIENT", "ID" });
+    var id_buf: [24]u8 = undefined;
+    const id_str = std.fmt.bufPrint(&id_buf, "{d}", .{id.int}) catch unreachable;
+    try h.expect(&.{ "CLIENT", "KILL", "ID", id_str }, .{ .int = 1 });
+    const killed = if (victim.call(&.{"PING"})) |_| false else |err| err == error.ConnectionClosed;
+    h.assert(killed, "CLIENT KILL did not close the connection", .{});
+    try h.expect(&.{ "CLIENT", "KILL", "ID", "999999" }, .{ .int = 0 });
+}
