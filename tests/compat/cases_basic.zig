@@ -117,6 +117,12 @@ pub fn counters(h: *Harness) !void {
     try h.expect(&.{ "INCRBYFLOAT", "f3", "abc" }, .{ .err = "ERR value is not a valid float" });
     try h.expect(&.{ "SET", "big", "1" }, .ok);
     try h.expect(&.{ "INCRBYFLOAT", "big", "inf" }, .{ .err = "ERR increment would produce NaN or Infinity" });
+    // Results are printed with every long double digit, like %.17Lf.
+    try h.expect(&.{ "SET", "ld", "-2.4" }, .ok);
+    try h.expect(&.{ "INCRBYFLOAT", "ld", "1e3" }, .{ .bulk = "997.59999999999999998" });
+    try h.expect(&.{ "INCRBYFLOAT", "ld", "1e3" }, .{ .bulk = "1997.59999999999999998" });
+    try h.expect(&.{ "HINCRBYFLOAT", "ldh", "f", "-2.4" }, .{ .bulk = "-2.4" });
+    try h.expect(&.{ "HINCRBYFLOAT", "ldh", "f", "1e3" }, .{ .bulk = "997.59999999999999998" });
 }
 
 pub fn bits(h: *Harness) !void {

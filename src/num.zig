@@ -197,7 +197,7 @@ fn emitDigits(digits: []const u8, k: i32, dest: []u8, neg: bool) usize {
 pub fn formatHuman(buf: []u8, v: f80) []const u8 {
     if (std.math.isNan(v)) return copyInto(buf, "nan");
     if (std.math.isInf(v)) return copyInto(buf, if (v < 0) "-inf" else "inf");
-    var s = std.fmt.bufPrint(buf, "{d:.17}", .{v}) catch return copyInto(buf, "nan");
+    var s = formatFixed17(buf, v);
     if (std.mem.indexOfScalar(u8, s, '.') != null) {
         var l = s.len;
         while (s[l - 1] == '0') l -= 1;
@@ -206,6 +206,73 @@ pub fn formatHuman(buf: []u8, v: f80) []const u8 {
     }
     if (std.mem.eql(u8, s, "-0")) return copyInto(buf, "0");
     return s;
+}
+
+/// Exact `%.17Lf` for a finite f80, rounding half to even like glibc.
+/// `std.fmt` cannot be used here: it prints the shortest round-trip digits
+/// and pads with zeros, so 997.6L (really 997.5999999999999999778) would
+/// come out as "997.60000000000000000" instead of "997.59999999999999998".
+fn formatFixed17(buf: []u8, v: f80) []const u8 {
+    const frac_digits = 17;
+    const bits: u80 = @bitCast(v);
+    const negative = (bits >> 79) != 0;
+    const biased: i32 = @intCast((bits >> 64) & 0x7fff);
+    const mant: u64 = @truncate(bits);
+    // value = mant * 2^e (f80 stores the integer bit explicitly).
+    const e: i32 = (if (biased == 0) @as(i32, 1) else biased) - 16383 - 63;
+
+    var len: usize = 0;
+    if (negative) {
+        buf[0] = '-';
+        len = 1;
+    }
+    if (e >= 0) {
+        // An integer: mant * 2^e in base 1e9 limbs, least significant first.
+        var limbs: [560]u32 = undefined;
+        limbs[0] = @intCast(mant % 1_000_000_000);
+        limbs[1] = @intCast((mant / 1_000_000_000) % 1_000_000_000);
+        limbs[2] = @intCast(mant / 1_000_000_000_000_000_000);
+        var n: usize = 3;
+        var left: i32 = e;
+        while (left > 0) {
+            const step: u5 = @intCast(@min(left, 30));
+            left -= step;
+            var carry: u64 = 0;
+            for (limbs[0..n]) |*l| {
+                const x = (@as(u64, l.*) << step) + carry;
+                l.* = @intCast(x % 1_000_000_000);
+                carry = x / 1_000_000_000;
+            }
+            while (carry != 0) : (n += 1) {
+                limbs[n] = @intCast(carry % 1_000_000_000);
+                carry /= 1_000_000_000;
+            }
+        }
+        while (n > 1 and limbs[n - 1] == 0) n -= 1;
+        len += (std.fmt.bufPrint(buf[len..], "{d}", .{limbs[n - 1]}) catch unreachable).len;
+        var i = n - 1;
+        while (i > 0) {
+            i -= 1;
+            len += (std.fmt.bufPrint(buf[len..], "{d:0>9}", .{limbs[i]}) catch unreachable).len;
+        }
+        buf[len] = '.';
+        @memset(buf[len + 1 .. len + 1 + frac_digits], '0');
+        return buf[0 .. len + 1 + frac_digits];
+    }
+    // mant * 10^17 < 2^121, so the scaled value fits in a u128.
+    const scale: u128 = 100_000_000_000_000_000;
+    const scaled: u128 = @as(u128, mant) * scale;
+    const shift: u32 = @intCast(-e);
+    var q: u128 = 0;
+    if (shift < 128) {
+        const sh: u7 = @intCast(shift);
+        q = scaled >> sh;
+        const rem = scaled - (q << sh);
+        const half = @as(u128, 1) << @intCast(shift - 1);
+        if (rem > half or (rem == half and (q & 1) == 1)) q += 1;
+    }
+    len += (std.fmt.bufPrint(buf[len..], "{d}.{d:0>17}", .{ q / scale, q % scale }) catch unreachable).len;
+    return buf[0..len];
 }
 
 fn copyInto(buf: []u8, s: []const u8) []const u8 {
@@ -317,6 +384,14 @@ test "formatHuman trims like ld2string" {
     try expectHuman("0.3", parseF80("0.1").? + parseF80("0.2").?);
     try expectHuman("5000", 5.0e3);
     try expectHuman("inf", std.math.inf(f80));
+    // Exact long double digits, as glibc prints them with %.17Lf.
+    try expectHuman("997.59999999999999998", parseF80("-2.4").? + parseF80("1e3").?);
+    try expectHuman("0.1", parseF80("0.1").?);
+    try expectHuman("0.00000000000000002", parseF80("1.5e-17").?);
+    try expectHuman("-1.5", -1.5);
+    try expectHuman("18446744073709551616", 18446744073709551616.0);
+    try expectHuman("99999999999999999997315645440", parseF80("1e29").?);
+    try expectHuman("0", parseF80("1e-30").?);
 }
 
 test "normalizeRange" {
